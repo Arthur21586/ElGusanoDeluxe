@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>El Gusano Deluxe</title>
+    <style>
+        body {
+            background: linear-gradient(135deg, #0d0d1a, #05050a);
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+        .header { text-align: center; margin-bottom: 6px; }
+        h1 { margin: 0; font-size: 1.6rem; color: #4ECCD3; text-shadow: 0 0 10px rgba(78, 204, 211, 0.6); }
+        .perfil-bar {
+            display: flex; gap: 12px; font-size: 0.85rem;
+            background: rgba(255, 255, 255, 0.05); padding: 4px 12px;
+            border-radius: 20px; border: 1px solid rgba(78, 204, 211, 0.3); margin-top: 4px;
+        }
+        .marcadores { display: flex; gap: 12px; font-size: 0.95rem; color: #EEEEEE; margin-top: 4px; }
+        .resaltado { color: #FFD700; font-weight: bold; }
+        .estado-powerup { color: #00E676; font-size: 0.85rem; font-weight: bold; min-height: 20px; margin-top: 2px; text-shadow: 0 0 5px rgba(0, 230, 118, 0.5); display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+        
+        .canvas-container { position: relative; }
+        canvas {
+            border: 3px solid #4ECCD3; border-radius: 12px;
+            background-color: #10101c; box-shadow: 0 0 20px rgba(78, 204, 211, 0.2); display: block;
+            touch-action: none;
+        }
+        
+        .modal {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 10, 20, 0.95); border-radius: 12px;
+            display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+            padding: 12px; box-sizing: border-box; visibility: hidden; overflow-y: auto; z-index: 10;
+        }
+        .modal h2 { margin: 2px 0 8px 0; color: #4ECCD3; font-size: 1.1rem; }
+        
+        #modalInicio { visibility: visible; justify-content: center; }
+        .input-usuario {
+            padding: 8px 12px; border-radius: 6px; border: 1px solid #4ECCD3;
+            background: #10101c; color: #fff; font-size: 0.9rem; margin: 10px 0; text-align: center; outline: none;
+        }
+
+        .lista-skins, .tabla-ranking, .lista-guia, .lista-tienda, .lista-logros { width: 100%; max-width: 320px; }
+        .item-skin, .item-guia, .item-tienda, .item-logro {
+            display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05);
+            padding: 6px 8px; margin-bottom: 5px; border-radius: 6px; font-size: 0.78rem; text-align: left;
+            justify-content: space-between;
+        }
+
+        .seccion-custom { width: 100%; max-width: 320px; margin-bottom: 10px; text-align: left; }
+        .seccion-custom h3 { font-size: 0.85rem; color: #FFD700; margin: 4px 0; }
+        .opciones-grid { display: flex; gap: 6px; flex-wrap: wrap; }
+        .btn-opcion { padding: 4px 8px; font-size: 0.75rem; background: rgba(255,255,255,0.1); border: 1px solid #4ECCD3; border-radius: 4px; color: #fff; cursor: pointer; }
+        .btn-opcion.activa { background: #4ECCD3; color: #000; font-weight: bold; }
+
+        .tabla-ranking { border-collapse: collapse; font-size: 0.85rem; }
+        .tabla-ranking th, .tabla-ranking td { padding: 6px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); }
+
+        .controles-bar { margin-top: 8px; display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
+        button { background: #4ECCD3; color: #0d0d1a; border: none; padding: 6px 8px; font-size: 0.75rem; font-weight: bold; border-radius: 6px; cursor: pointer; }
+        button:disabled { background: #555; color: #888; cursor: not-allowed; }
+        .btn-principal { background: #00E676; color: #000; font-size: 0.85rem; padding: 8px 12px; }
+        .btn-danger { background: #FF1744; color: #fff; }
+
+        .dpad { display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>El Gusano Deluxe</h1>
+        <div class="perfil-bar">
+            <div>👤 <span id="nombreJugador">Jugador</span></div>
+            <div>Nivel: <span id="nivelJugador" class="resaltado">1/10</span></div>
+            <div>💰 Monedas: <span id="monedasJugador" class="resaltado">0</span></div>
+        </div>
+        <div class="marcadores">
+            <div>Puntos: <span id="puntaje">0</span></div>
+            <div>Multiplicador: <span id="combo" class="resaltado">x1</span></div>
+            <div>Récord: <span id="record" class="resaltado">0</span></div>
+        </div>
+        <div id="estadoPowerUp" class="estado-powerup"></div>
+    </div>
+    
+    <div class="canvas-container">
+        <canvas id="gameCanvas" width="360" height="360"></canvas>
+
+        <div id="modalInicio" class="modal">
+            <h2>🐍 ¡BIENVENIDO!</h2>
+            <p style="font-size:0.85rem; margin: 4px 0;">Ingresa tu usuario para comenzar:</p>
+            <input type="text" id="inputUsuario" class="input-usuario" placeholder="Tu Nombre o Nick" maxlength="12">
+            <button class="btn-principal" onclick="confirmarInicio()">▶ Iniciar Partida</button>
+        </div>
+        
+        <div id="modalPausa" class="modal" style="justify-content:center;">
+            <h2>⏸️ PAUSA</h2>
+            <button class="btn-principal" onclick="alternarPausa()">Reanudar</button>
+        </div>
+
+        <div id="modalSkins" class="modal">
+            <h2>🎨 Personalización</h2>
+            <div class="seccion-custom">
+                <h3>Cabeza (Accesorios):</h3>
+                <div class="opciones-grid" id="gridCabezas"></div>
+            </div>
+            <div class="seccion-custom">
+                <h3>Efecto de Cola:</h3>
+                <div class="opciones-grid" id="gridEfectos"></div>
+            </div>
+            <div class="seccion-custom">
+                <h3>Skins Base:</h3>
+                <div class="lista-skins" id="contenedorSkins"></div>
+            </div>
+            <button onclick="cerrarModales()" style="margin-top: 8px;">Cerrar</button>
+        </div>
+
+        <div id="modalLogros" class="modal">
+            <h2>🏆 LOGROS</h2>
+            <div class="lista-logros" id="contenedorLogros"></div>
+            <button onclick="cerrarModales()" style="margin-top: 8px;">Cerrar</button>
+        </div>
+
+        <div id="modalTienda" class="modal">
+            <h2>🛒 Tienda de Poderes</h2>
+            <div class="
