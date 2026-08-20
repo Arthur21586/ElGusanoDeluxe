@@ -320,18 +320,20 @@
         actualizarRecordUI();
         document.addEventListener("keydown", manejarTeclado);
 
-        // --- SISTEMA DE GESTOS TÁCTILES (SWIPE) ---
+        // --- SISTEMA DE GESTOS TÁCTILES GLOBAL (En toda la pantalla) ---
         let touchStartX = 0;
         let touchStartY = 0;
-        const contenedorJuego = document.getElementById("contenedorJuego");
 
-        contenedorJuego.addEventListener("touchstart", function(e) {
+        document.addEventListener("touchstart", function(e) {
+            if (e.target.tagName === 'BUTTON' || e.target.closest('.modal')) return;
+
             touchStartX = e.touches[0].clientX;
             touchStartY = e.touches[0].clientY;
         }, { passive: true });
 
-        contenedorJuego.addEventListener("touchend", function(e) {
+        document.addEventListener("touchend", function(e) {
             if (estaPausado || !juegoIniciado) return;
+            if (e.target.tagName === 'BUTTON' || e.target.closest('.modal')) return;
 
             let touchEndX = e.changedTouches[0].clientX;
             let touchEndY = e.changedTouches[0].clientY;
@@ -339,7 +341,6 @@
             let diffX = touchEndX - touchStartX;
             let diffY = touchEndY - touchStartY;
 
-            // Umbral mínimo para considerar que fue un deslizamiento y no un tap casual
             if (Math.abs(diffX) > 20 || Math.abs(diffY) > 20) {
                 if (Math.abs(diffX) > Math.abs(diffY)) {
                     if (diffX > 0) cambiarDir('DER');
