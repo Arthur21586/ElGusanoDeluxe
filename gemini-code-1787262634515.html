@@ -29,7 +29,7 @@
         .resaltado { color: #FFD700; font-weight: bold; }
         .estado-powerup { color: #00E676; font-size: 0.85rem; font-weight: bold; min-height: 20px; margin-top: 2px; text-shadow: 0 0 5px rgba(0, 230, 118, 0.5); display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
         
-        .canvas-container { position: relative; }
+        .canvas-container { position: relative; touch-action: none; }
         canvas {
             border: 3px solid #4ECCD3; border-radius: 12px;
             background-color: #10101c; box-shadow: 0 0 20px rgba(78, 204, 211, 0.2); display: block;
@@ -96,7 +96,7 @@
         <div id="estadoPowerUp" class="estado-powerup"></div>
     </div>
     
-    <div class="canvas-container">
+    <div class="canvas-container" id="contenedorJuego">
         <canvas id="gameCanvas" width="360" height="360"></canvas>
 
         <div id="modalInicio" class="modal">
@@ -319,6 +319,37 @@
         actualizarUIPerfil();
         actualizarRecordUI();
         document.addEventListener("keydown", manejarTeclado);
+
+        // --- SISTEMA DE GESTOS TÁCTILES (SWIPE) ---
+        let touchStartX = 0;
+        let touchStartY = 0;
+        const contenedorJuego = document.getElementById("contenedorJuego");
+
+        contenedorJuego.addEventListener("touchstart", function(e) {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        }, { passive: true });
+
+        contenedorJuego.addEventListener("touchend", function(e) {
+            if (estaPausado || !juegoIniciado) return;
+
+            let touchEndX = e.changedTouches[0].clientX;
+            let touchEndY = e.changedTouches[0].clientY;
+
+            let diffX = touchEndX - touchStartX;
+            let diffY = touchEndY - touchStartY;
+
+            // Umbral mínimo para considerar que fue un deslizamiento y no un tap casual
+            if (Math.abs(diffX) > 20 || Math.abs(diffY) > 20) {
+                if (Math.abs(diffX) > Math.abs(diffY)) {
+                    if (diffX > 0) cambiarDir('DER');
+                    else cambiarDir('IZQ');
+                } else {
+                    if (diffY > 0) cambiarDir('ABA');
+                    else cambiarDir('ARR');
+                }
+            }
+        }, { passive: true });
 
         setInterval(() => {
             if (estaPausado || !juegoIniciado) return;
