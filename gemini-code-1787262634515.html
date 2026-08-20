@@ -33,7 +33,6 @@
         canvas {
             border: 3px solid #4ECCD3; border-radius: 12px;
             background-color: #10101c; box-shadow: 0 0 20px rgba(78, 204, 211, 0.2); display: block;
-            touch-action: none;
         }
         
         .modal {
@@ -72,7 +71,12 @@
         .btn-principal { background: #00E676; color: #000; font-size: 0.85rem; padding: 8px 12px; }
         .btn-danger { background: #FF1744; color: #fff; }
 
-        .dpad { display: none; }
+        .dpad { display: grid; grid-template-columns: repeat(3, 40px); grid-template-rows: repeat(3, 40px); gap: 4px; margin-top: 8px; }
+        .btn-dir { background: rgba(78, 204, 211, 0.15); border: 2px solid #4ECCD3; color: #fff; font-size: 1.1rem; border-radius: 8px; display: flex; align-items: center; justify-content: center; user-select: none; }
+        .btn-dir:active { background: #4ECCD3; color: #000; }
+        .empty { visibility: hidden; }
+
+        @media (min-width: 600px) { .dpad { display: none; } }
     </style>
 </head>
 <body>
@@ -132,4 +136,796 @@
 
         <div id="modalTienda" class="modal">
             <h2>🛒 Tienda de Poderes</h2>
-            <div class="
+            <div class="lista-tienda" id="contenedorTienda"></div>
+            <button onclick="cerrarModales()" style="margin-top: 8px;">Cerrar</button>
+        </div>
+
+        <div id="modalRanking" class="modal">
+            <h2>🏆 TOP 10 RANKING</h2>
+            <table class="tabla-ranking">
+                <thead>
+                    <tr><th>#</th><th>Jugador</th><th>Máx. Puntos</th></tr>
+                </thead>
+                <tbody id="tablaRankingBody"></tbody>
+            </table>
+            <button onclick="cerrarModales()" style="margin-top: 15px;">Cerrar</button>
+        </div>
+
+        <div id="modalGuia" class="modal">
+            <h2>📖 Guía de Objetos</h2>
+            <div class="lista-guia">
+                <div class="item-guia">🍎 Comida Extra (5💰): +20 manzanas (20s).</div>
+                <div class="item-guia">🛡️ Escudo (2💰): Absorbe 1 golpe. Máx 5.</div>
+                <div class="item-guia">🧲 Imán (2💰): Atrae comida x 10s.</div>
+                <div class="item-guia">⚡ Veloz (1💰): Doble vel. x 30s.</div>
+                <div class="item-guia">🐌 Lento (1💰): Vel. lenta x 10s.</div>
+                <div class="item-guia">✂️ Reductor (10💰): Reduce a la mitad al gusano.</div>
+                <div class="item-guia">💎 Mega Comida (5💰): Siguiente manzana vale 200 pts (5s).</div>
+                <div class="item-guia">🧹 Limpiador (10💰): Elimina venenos del mapa.</div>
+                <div class="item-guia">💀 Veneno: No desaparece. Resta -10 x (cant. de venenos).</div>
+            </div>
+            <button onclick="cerrarModales()" style="margin-top: 8px;">Cerrar</button>
+        </div>
+    </div>
+
+    <div class="controles-bar">
+        <button id="btnBucleJuego" class="btn-principal" onclick="alternarPausa()">▶ Iniciar</button>
+        <button onclick="abrirSkins()">🎨 Gusano</button>
+        <button onclick="abrirLogros()">🏆 Logros</button>
+        <button onclick="abrirTienda()">🛒 Tienda</button>
+        <button onclick="abrirRanking()">🏆 Top 10</button>
+        <button onclick="abrirGuia()">Guía</button>
+        <button class="btn-danger" onclick="resetearPuntuacion()">🔒 Reset</button>
+    </div>
+
+    <div class="dpad">
+        <div class="empty"></div>
+        <div class="btn-dir" onclick="cambiarDir('ARR')">▲</div>
+        <div class="empty"></div>
+        <div class="btn-dir" onclick="cambiarDir('IZQ')">◀</div>
+        <div class="empty"></div>
+        <div class="btn-dir" onclick="cambiarDir('DER')">▶</div>
+        <div class="empty"></div>
+        <div class="btn-dir" onclick="cambiarDir('ABA')">▼</div>
+        <div class="empty"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        const tamañoGrid = 18;
+        const conteoGrid = canvas.width / tamañoGrid;
+        let VELOCIDAD_JUEGO = 140; 
+        const CLAVE_ADMIN = "1234";
+
+        const REQUISITOS_NIVEL = {
+            1: 0, 2: 200, 3: 500, 4: 1000, 5: 1800,
+            6: 2800, 7: 4000, 8: 5500, 9: 7500, 10: 10000
+        };
+
+        const LOGROS_DEF = [
+            { id: 'paso', icono: '🐣', nombre: 'Primer paso', req: 'Primera partida' },
+            { id: 'gloton', icono: '🍎', nombre: 'Glotón', req: 'Comer 100 alimentos' },
+            { id: 'velocista', icono: '⚡', nombre: 'Velocista', req: 'Usar 10 velocidades' },
+            { id: 'millonario', icono: '💎', nombre: 'Millonario', req: 'Conseguir 10,000 puntos' },
+            { id: 'gigante', icono: '🐍', nombre: 'Gigante', req: 'Llegar a 50 segmentos' },
+            { id: 'maestro', icono: '👑', nombre: 'Maestro', req: 'Llegar al nivel 10' },
+            { id: 'sobreviviente', icono: '💀', nombre: 'Sobreviviente', req: 'Evitar 5 venenos' },
+            { id: 'imparable', icono: '🔥', nombre: 'Imparable', req: 'Combo x4 por 30s' }
+        ];
+
+        const CABEZAS_DEF = [
+            { id: 'ninguna', texto: 'Ninguna' },
+            { id: 'gafas', texto: '😎' },
+            { id: 'alien', texto: '👽' },
+            { id: 'robot', texto: '🤖' },
+            { id: 'demonio', texto: '👹' },
+            { id: 'corona', texto: '👑' }
+        ];
+
+        const EFECTOS_DEF = [
+            { id: 'ninguno', texto: 'Ninguno' },
+            { id: 'fuego', texto: '🔥 Fuego' },
+            { id: 'electricidad', texto: '⚡ Electricidad' },
+            { id: 'particulas', texto: '✨ Partículas' },
+            { id: 'humo', texto: '💨 Humo' }
+        ];
+
+        let perfil = JSON.parse(localStorage.getItem("perfilGusano")) || {
+            nombre: "Jugador1",
+            nivel: 1,
+            puntosAcumulados: 0,
+            monedas: 0,
+            skinEquipada: 'clasica',
+            cabezaEquipada: 'ninguna',
+            efectoEquipado: 'ninguno',
+            logrosObtenidos: [],
+            puestosSuperados: [],
+            estats: { comidas: 0, velocidades: 0, venenosEsquivados: 0 }
+        };
+
+        if (!perfil.estats) perfil.estats = { comidas: 0, velocidades: 0, venenosEsquivados: 0 };
+        if (!perfil.logrosObtenidos) perfil.logrosObtenidos = [];
+        if (!perfil.puestosSuperados) perfil.puestosSuperados = [];
+
+        const RANKING_DEFECTO = [
+            { nombre: "ProGamer", puntos: 5000, puesto: 1, recompensa: 100 },
+            { nombre: "Shadow", puntos: 3500, puesto: 2, recompensa: 50 },
+            { nombre: "Viper", puntos: 2000, puesto: 3, recompensa: 25 },
+            { nombre: "Sal", puntos: 1000, puesto: 4, recompensa: 15 },
+            { nombre: "Lana", puntos: 750, puesto: 5, recompensa: 10 }
+        ];
+
+        let rankingGlobal = JSON.parse(localStorage.getItem("rankingGusano")) || RANKING_DEFECTO;
+
+        const SKINS = {
+            clasica: { nombre: "🐍 Clásica", nivelReq: 1, colorCabeza: "#00E676", colorCuerpo: "hsl(140, 80%, 50%)" },
+            fuego: { nombre: "🔥 Fuego", nivelReq: 2, colorCabeza: "#FF3D00", colorCuerpo: "#FF9100" },
+            hielo: { nombre: "❄️ Hielo", nivelReq: 3, colorCabeza: "#00E5FF", colorCuerpo: "#80D8FF" },
+            electrica: { nombre: "⚡ Eléctrica", nivelReq: 4, colorCabeza: "#FFEA00", colorCuerpo: "#FFFF8D" },
+            fantasma: { nombre: "👻 Fantasma", nivelReq: 5, colorCabeza: "#EA80FC", colorCuerpo: "#E1BEE7" },
+            arcoiris: { nombre: "🌈 Arcoíris", nivelReq: 6, colorCabeza: "#FF4081", esMulticolor: true },
+            neon: { nombre: "🔮 Neón", nivelReq: 7, colorCabeza: "#D500F9", colorCuerpo: "#651FFF" },
+            dragon: { nombre: "🐲 Dragón", nivelReq: 8, colorCabeza: "#00C853", colorCuerpo: "#DD2C00" },
+            cosmico: { nombre: "🌌 Cósmico", nivelReq: 9, colorCabeza: "#3D5AFE", colorCuerpo: "#00E5FF" },
+            oro: { nombre: "👑 Oro Real", nivelReq: 10, colorCabeza: "#FFD700", colorCuerpo: "#FFAB00" }
+        };
+
+        let gusano = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
+        let dx = 1, dy = 0, sigDx = 1, sigDy = 0;
+        let puntos = 0, combo = 1, tiempoUltimaComida = 0;
+        let puntosParaMoneda = 0;
+        let estaPausado = true; 
+        let juegoIniciado = false;
+        let tiempoUltimoPaso = 0;
+        let tiempoCombo4 = 0;
+
+        let comida = null;
+        let comidasEspeciales = [];
+        let comidasVenenosas = [];
+        let tiempoComidasEspeciales = 0;
+        let temporizadorGeneracionVeneno = 0;
+
+        let particulas = [];
+        
+        let cantidadEscudos = 0;
+        let efectosActivos = {};
+        let sacudida = 0;
+
+        const TIPOS_COMIDA = [
+            { tipo: 'normal', color: '#FF4081', puntos: 10, prob: 0.70 },
+            { tipo: 'estrella', color: '#FFD700', puntos: 50, prob: 0.15 },
+            { tipo: 'diamante', color: '#00E5FF', puntos: 100, prob: 0.05 },
+            { tipo: 'dorada', color: '#76FF03', puntos: 150, prob: 0.10 }
+        ];
+
+        const TIPOS_POWERUP = [
+            { id: 'comida_extra', texto: '🍎 Comida Extra (20x)', precio: 5, duracion: 20 },
+            { id: 'escudo', texto: '🛡️ Escudo (Máx 5)', precio: 2 },
+            { id: 'iman', texto: '🧲 Imán', precio: 2, duracion: 10 },
+            { id: 'velocidad', texto: '⚡ Super Velocidad', precio: 1, duracion: 30 },
+            { id: 'slow', texto: '🐌 Cámara Lenta', precio: 1, duracion: 10 },
+            { id: 'reductor', texto: '✂️ Reductor (1/2 tamaño)', precio: 10 },
+            { id: 'doble', texto: '✖️2 Doble Puntuación', precio: 5, duracion: 25 },
+            { id: 'mega_comida', texto: '💎 Mega Comida (+200 pts)', precio: 5, duracion: 5 },
+            { id: 'triple', texto: '🔥 Triple Puntos (x3)', precio: 7, duracion: 20 },
+            { id: 'cuadruple', texto: '🔥 Cuádruple Puntos (x4)', precio: 8, duracion: 15 },
+            { id: 'quintuple', texto: '🔥 Quíntuple Puntos (x5)', precio: 10, duracion: 10 },
+            { id: 'limpiador', texto: '🧹 Limpiador de Venenos', precio: 10 }
+        ];
+
+        document.getElementById("inputUsuario").value = perfil.nombre;
+        actualizarUIPerfil();
+        actualizarRecordUI();
+        document.addEventListener("keydown", manejarTeclado);
+
+        setInterval(() => {
+            if (estaPausado || !juegoIniciado) return;
+
+            let huboCambio = false;
+
+            for (let clave in efectosActivos) {
+                if (efectosActivos[clave] > 0) {
+                    efectosActivos[clave]--;
+                    huboCambio = true;
+                    if (efectosActivos[clave] <= 0) {
+                        delete efectosActivos[clave];
+                    }
+                }
+            }
+
+            if (tiempoComidasEspeciales > 0) {
+                tiempoComidasEspeciales--;
+                huboCambio = true;
+                if (tiempoComidasEspeciales <= 0) {
+                    comidasEspeciales = [];
+                }
+            }
+
+            temporizadorGeneracionVeneno++;
+            if (temporizadorGeneracionVeneno >= 12) {
+                generarVenenoObstaculo();
+                temporizadorGeneracionVeneno = 0;
+            }
+
+            if (huboCambio) actualizarUIEstadoPowerUp();
+        }, 1000);
+
+        function confirmarInicio() {
+            let nombre = document.getElementById("inputUsuario").value.trim();
+            if (nombre !== "") perfil.nombre = nombre;
+            
+            verificarLogro('paso');
+            guardarPerfil();
+            actualizarUIPerfil();
+            actualizarRecordUI();
+
+            document.getElementById("modalInicio").style.visibility = "hidden";
+            juegoIniciado = true;
+            estaPausado = false;
+            document.getElementById("btnBucleJuego").innerText = "⏸️ Pausa";
+            generarComida();
+        }
+
+        function buclePrincipal(tiempoActual) {
+            requestAnimationFrame(buclePrincipal);
+            if (estaPausado || !juegoIniciado) {
+                dibujarEscena();
+                return;
+            }
+
+            let velEfectiva = VELOCIDAD_JUEGO;
+            if (efectosActivos['slow']) velEfectiva *= 1.5;
+            if (efectosActivos['velocidad']) velEfectiva *= 0.6;
+
+            if (tiempoActual - tiempoUltimoPaso >= velEfectiva) {
+                tiempoUltimoPaso = tiempoActual;
+                dx = sigDx; dy = sigDy;
+                actualizarEstado();
+            }
+
+            actualizarEfectos();
+            dibujarEscena();
+        }
+
+        function actualizarEstado() {
+            if (efectosActivos['iman']) {
+                if (comida) {
+                    if (comida.x < gusano[0].x) comida.x++;
+                    else if (comida.x > gusano[0].x) comida.x--;
+                    if (comida.y < gusano[0].y) comida.y++;
+                    else if (comida.y > gusano[0].y) comida.y--;
+                }
+
+                comidasEspeciales.forEach(cExtra => {
+                    if (cExtra.x < gusano[0].x) cExtra.x++;
+                    else if (cExtra.x > gusano[0].x) cExtra.x--;
+                    if (cExtra.y < gusano[0].y) cExtra.y++;
+                    else if (cExtra.y > gusano[0].y) cExtra.y--;
+                });
+            }
+
+            const cabeza = { x: gusano[0].x + dx, y: gusano[0].y + dy };
+
+            let colisionPared = cabeza.x < 0 || cabeza.x >= conteoGrid || cabeza.y < 0 || cabeza.y >= conteoGrid;
+            let colisionCuerpo = gusano.some(seg => seg.x === cabeza.x && seg.y === cabeza.y);
+
+            if (colisionPared || colisionCuerpo) {
+                if (cantidadEscudos > 0) {
+                    cantidadEscudos--;
+                    actualizarUIEstadoPowerUp();
+                    sacudida = 10;
+                    return; 
+                } else {
+                    finalizarJuego();
+                    return;
+                }
+            }
+
+            gusano.unshift(cabeza);
+
+            if (gusano.length >= 50) verificarLogro('gigante');
+
+            let comio = false;
+
+            for (let i = comidasVenenosas.length - 1; i >= 0; i--) {
+                if (cabeza.x === comidasVenenosas[i].x && cabeza.y === comidasVenenosas[i].y) {
+                    comidasVenenosas.splice(i, 1);
+                    procesarComida('venenosa');
+                    comio = true;
+                    break;
+                }
+            }
+
+            if (!comio && comida && cabeza.x === comida.x && cabeza.y === comida.y) {
+                procesarComida(comida.tipo);
+                generarComida();
+                comio = true;
+            }
+
+            if (!comio) {
+                for (let i = comidasEspeciales.length - 1; i >= 0; i--) {
+                    if (cabeza.x === comidasEspeciales[i].x && cabeza.y === comidasEspeciales[i].y) {
+                        comidasEspeciales.splice(i, 1);
+                        procesarComida('especial_tienda');
+                        comio = true;
+                        
+                        if (!comida) generarComida();
+                        break;
+                    }
+                }
+            }
+
+            if (!comio) {
+                gusano.pop();
+            }
+        }
+
+        function procesarComida(tipoComida) {
+            let ptsBase = 10;
+            let colorParticula = '#FF4081';
+
+            if (tipoComida === 'venenosa') {
+                let penalizacion = (comidasVenenosas.length + 1) * 10;
+                puntos = Math.max(0, puntos - penalizacion);
+                if (gusano.length > 2) gusano.pop();
+                sacudida = 8;
+                colorParticula = '#D500F9';
+            } else {
+                perfil.estats.comidas++;
+                if (perfil.estats.comidas >= 100) verificarLogro('gloton');
+
+                if (tipoComida === 'especial_tienda') {
+                    ptsBase = 10;
+                    colorParticula = '#FF1744';
+                } else {
+                    let conf = TIPOS_COMIDA.find(c => c.tipo === tipoComida) || TIPOS_COMIDA[0];
+                    ptsBase = conf.puntos;
+                    colorParticula = conf.color;
+                }
+
+                if (efectosActivos['mega_comida']) {
+                    ptsBase = 200;
+                    delete efectosActivos['mega_comida'];
+                }
+
+                let mult = combo;
+                if (efectosActivos['quintuple']) mult *= 5;
+                else if (efectosActivos['cuadruple']) mult *= 4;
+                else if (efectosActivos['triple']) mult *= 3;
+                else if (efectosActivos['doble']) mult *= 2;
+
+                let ptsGanados = ptsBase * mult;
+                puntos += ptsGanados;
+                puntosParaMoneda += ptsGanados;
+
+                while (puntosParaMoneda >= 50) {
+                    perfil.monedas++;
+                    puntosParaMoneda -= 50;
+                }
+
+                acumularPuntosYNivel(ptsGanados);
+                verificarSuperacionPuestos(puntos);
+            }
+
+            let ahora = Date.now();
+            if (ahora - tiempoUltimaComida < 3000) combo = Math.min(combo + 1, 4);
+            else combo = 1;
+            tiempoUltimaComida = ahora;
+
+            if (gusano.length > 0) {
+                crearParticulas(gusano[0].x * tamañoGrid + 9, gusano[0].y * tamañoGrid + 9, colorParticula);
+            }
+            sacudida = 4;
+
+            document.getElementById("puntaje").innerText = puntos;
+            document.getElementById("combo").innerText = 'x' + combo;
+            actualizarUIPerfil();
+        }
+
+        function verificarSuperacionPuestos(puntosActuales) {
+            RANKING_DEFECTO.forEach(top => {
+                if (puntosActuales > top.puntos && !perfil.puestosSuperados.includes(top.puesto)) {
+                    perfil.puestosSuperados.push(top.puesto);
+                    perfil.monedas += top.recompensa;
+                    alert(`🎉 ¡HAS SUPERADO A ${top.nombre.toUpperCase()} (Puesto ${top.puesto})!\n🎁 Recompensa: +${top.recompensa} Monedas.`);
+                    guardarPerfil();
+                    actualizarUIPerfil();
+                }
+            });
+        }
+
+        function generarComida() {
+            let rand = Math.random(), acumulado = 0, tipoSel = 'normal';
+            for (let t of TIPOS_COMIDA) {
+                acumulado += t.prob;
+                if (rand <= acumulado) { tipoSel = t.tipo; break; }
+            }
+            comida = { x: Math.floor(Math.random() * conteoGrid), y: Math.floor(Math.random() * conteoGrid), tipo: tipoSel };
+        }
+
+        function generarVenenoObstaculo() {
+            comidasVenenosas.push({
+                x: Math.floor(Math.random() * conteoGrid),
+                y: Math.floor(Math.random() * conteoGrid)
+            });
+        }
+
+        function generarComidasEspeciales() {
+            comidasEspeciales = [];
+            for (let i = 0; i < 20; i++) {
+                comidasEspeciales.push({
+                    x: Math.floor(Math.random() * conteoGrid),
+                    y: Math.floor(Math.random() * conteoGrid)
+                });
+            }
+            tiempoComidasEspeciales = 20;
+            if (!comida) generarComida();
+        }
+
+        function acumularPuntosYNivel(pts) {
+            perfil.puntosAcumulados += pts;
+            if (perfil.puntosAcumulados >= 10000) verificarLogro('millonario');
+
+            while (perfil.nivel < 10) {
+                let sigNivel = perfil.nivel + 1;
+                if (perfil.puntosAcumulados >= REQUISITOS_NIVEL[sigNivel]) {
+                    perfil.nivel = sigNivel;
+                    if (perfil.nivel === 10) verificarLogro('maestro');
+                    alert(`🎉 ¡FELICIDADES! HAS SUBIDO AL NIVEL ${perfil.nivel}`);
+                } else {
+                    break;
+                }
+            }
+            guardarPerfil();
+        }
+
+        function activarPowerUp(idPoder) {
+            let obj = TIPOS_POWERUP.find(p => p.id === idPoder);
+            if (!obj) return;
+
+            if (obj.id === 'comida_extra') {
+                generarComidasEspeciales();
+            } else if (obj.id === 'escudo') {
+                if (cantidadEscudos < 5) cantidadEscudos++;
+                else alert("⚠️ Límite de escudos alcanzado (Máx 5)");
+            } else if (obj.id === 'reductor') {
+                let nuevoTam = Math.max(2, Math.floor(gusano.length / 2));
+                gusano = gusano.slice(0, nuevoTam);
+            } else if (obj.id === 'limpiador') {
+                comidasVenenosas = [];
+            } else {
+                if (obj.id === 'velocidad') {
+                    perfil.estats.velocidades++;
+                    if (perfil.estats.velocidades >= 10) verificarLogro('velocista');
+                }
+                efectosActivos[obj.id] = obj.duracion || 30;
+            }
+            actualizarUIEstadoPowerUp();
+        }
+
+        function actualizarUIEstadoPowerUp() {
+            let html = [];
+            if (cantidadEscudos > 0) html.push(`🛡️ Escudos: ${cantidadEscudos}/5`);
+            if (tiempoComidasEspeciales > 0) html.push(`🍎 Comida: ${tiempoComidasEspeciales}s`);
+            if (efectosActivos['iman']) html.push(`🧲 Imán: ${efectosActivos['iman']}s`);
+            if (efectosActivos['velocidad']) html.push(`⚡ Veloz: ${efectosActivos['velocidad']}s`);
+            if (efectosActivos['slow']) html.push(`🐌 Lento: ${efectosActivos['slow']}s`);
+            if (efectosActivos['mega_comida']) html.push(`💎 Mega: ${efectosActivos['mega_comida']}s`);
+            if (efectosActivos['quintuple']) html.push(`🔥 x5: ${efectosActivos['quintuple']}s`);
+            else if (efectosActivos['cuadruple']) html.push(`🔥 x4: ${efectosActivos['cuadruple']}s`);
+            else if (efectosActivos['triple']) html.push(`🔥 x3: ${efectosActivos['triple']}s`);
+            else if (efectosActivos['doble']) html.push(`✖️2 Doble: ${efectosActivos['doble']}s`);
+
+            document.getElementById("estadoPowerUp").innerText = html.join(' | ');
+        }
+
+        function verificarLogro(idLogro) {
+            if (!perfil.logrosObtenidos.includes(idLogro)) {
+                perfil.logrosObtenidos.push(idLogro);
+                perfil.monedas += 5;
+                let l = LOGROS_DEF.find(x => x.id === idLogro);
+                alert(`🏆 ¡LOGRO DESBLOQUEADO!\n${l.icono} ${l.nombre}\n🎁 +5 Monedas otorgadas.`);
+                guardarPerfil();
+                actualizarUIPerfil();
+            }
+        }
+
+        function actualizarEfectos() {
+            particulas.forEach((p, i) => {
+                p.x += p.vx; p.y += p.vy; p.vida -= 0.04;
+                if (p.vida <= 0) particulas.splice(i, 1);
+            });
+
+            if (combo === 4) {
+                tiempoCombo4++;
+                if (tiempoCombo4 >= 1800) verificarLogro('imparable');
+            } else {
+                tiempoCombo4 = 0;
+            }
+
+            if (perfil.efectoEquipado !== 'ninguno' && gusano.length > 0) {
+                let cola = gusano[gusano.length - 1];
+                let px = cola.x * tamañoGrid + 9;
+                let py = cola.y * tamañoGrid + 9;
+                
+                if (perfil.efectoEquipado === 'fuego') crearParticulas(px, py, '#FF3D00');
+                if (perfil.efectoEquipado === 'electricidad') crearParticulas(px, py, '#FFFF00');
+                if (perfil.efectoEquipado === 'particulas') crearParticulas(px, py, '#00E5FF');
+                if (perfil.efectoEquipado === 'humo') crearParticulas(px, py, '#AAAAAA');
+            }
+
+            if (sacudida > 0) sacudida *= 0.8;
+        }
+
+        function dibujarEscena() {
+            ctx.save();
+            if (sacudida > 0.5) ctx.translate((Math.random() - 0.5) * sacudida, (Math.random() - 0.5) * sacudida);
+
+            ctx.fillStyle = "#10101c";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.02)";
+            for (let i = 0; i < canvas.width; i += tamañoGrid) {
+                ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height);
+                ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke();
+            }
+
+            comidasVenenosas.forEach(v => {
+                ctx.font = "14px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                ctx.fillText("💀", v.x * tamañoGrid + 9, v.y * tamañoGrid + 9);
+            });
+
+            if (comida) {
+                let confComida = TIPOS_COMIDA.find(c => c.tipo === comida.tipo);
+                ctx.shadowBlur = 12; ctx.shadowColor = confComida.color;
+                ctx.fillStyle = confComida.color;
+                ctx.beginPath(); ctx.arc(comida.x * tamañoGrid + 9, comida.y * tamañoGrid + 9, 7, 0, Math.PI * 2); ctx.fill();
+            }
+
+            if (comidasEspeciales.length > 0) {
+                let visibilidad = Math.floor(Date.now() / 200) % 2 === 0;
+                if (visibilidad) {
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = "#FF1744";
+                    ctx.fillStyle = "#FF1744";
+                    comidasEspeciales.forEach(c => {
+                        ctx.beginPath();
+                        ctx.arc(c.x * tamañoGrid + 9, c.y * tamañoGrid + 9, 6, 0, Math.PI * 2);
+                        ctx.fill();
+                    });
+                }
+            }
+
+            let skin = SKINS[perfil.skinEquipada] || SKINS.clasica;
+            gusano.forEach((seg, i) => {
+                let esCabeza = i === 0;
+                let colorSeg = skin.colorCuerpo;
+
+                if (skin.esMulticolor) colorSeg = `hsl(${(i * 20) % 360}, 90%, 60%)`;
+                if (esCabeza) colorSeg = skin.colorCabeza;
+
+                ctx.shadowBlur = esCabeza ? 10 : 0;
+                ctx.shadowColor = colorSeg;
+                ctx.fillStyle = colorSeg;
+
+                ctx.beginPath();
+                ctx.roundRect(seg.x * tamañoGrid + 1, seg.y * tamañoGrid + 1, tamañoGrid - 2, tamañoGrid - 2, esCabeza ? 6 : 4);
+                ctx.fill();
+
+                if (esCabeza && perfil.cabezaEquipada !== 'ninguna') {
+                    let cab = CABEZAS_DEF.find(c => c.id === perfil.cabezaEquipada);
+                    if (cab) {
+                        ctx.font = "12px sans-serif";
+                        ctx.textAlign = "center";
+                        ctx.textBaseline = "middle";
+                        ctx.fillText(cab.texto, seg.x * tamañoGrid + 9, seg.y * tamañoGrid + 9);
+                    }
+                }
+            });
+
+            ctx.shadowBlur = 0;
+            particulas.forEach(p => {
+                ctx.fillStyle = p.color; ctx.globalAlpha = p.vida;
+                ctx.fillRect(p.x, p.y, 3, 3);
+            });
+            ctx.globalAlpha = 1.0;
+
+            ctx.restore();
+        }
+
+        function crearParticulas(x, y, color) {
+            for (let i = 0; i < 3; i++) {
+                particulas.push({
+                    x: x, y: y,
+                    vx: (Math.random() - 0.5) * 3,
+                    vy: (Math.random() - 0.5) * 3,
+                    vida: 1.0, color: color
+                });
+            }
+        }
+
+        function cambiarDir(dir) {
+            if (dir === 'IZQ' && dx === 0) { sigDx = -1; sigDy = 0; }
+            if (dir === 'ARR' && dy === 0) { sigDx = 0; sigDy = -1; }
+            if (dir === 'DER' && dx === 0) { sigDx = 1; sigDy = 0; }
+            if (dir === 'ABA' && dy === 0) { sigDx = 0; sigDy = 1; }
+        }
+
+        function manejarTeclado(e) {
+            if (e.keyCode === 32) { e.preventDefault(); alternarPausa(); return; }
+            const TECLAS = { 37: 'IZQ', 38: 'ARR', 39: 'DER', 40: 'ABA' };
+            if (TECLAS[e.keyCode]) cambiarDir(TECLAS[e.keyCode]);
+        }
+
+        function alternarPausa() {
+            if (!juegoIniciado) {
+                document.getElementById("modalInicio").style.visibility = "visible";
+                return;
+            }
+            cerrarModales();
+            estaPausado = !estaPausado;
+            document.getElementById("modalPausa").style.visibility = estaPausado ? "visible" : "hidden";
+            document.getElementById("btnBucleJuego").innerText = estaPausado ? "▶ Reanudar" : "⏸️ Pausa";
+        }
+
+        function abrirSkins() { estaPausado = true; document.getElementById("btnBucleJuego").innerText = "▶ Reanudar"; cerrarModales(); renderizarPersonalizacion(); document.getElementById("modalSkins").style.visibility = "visible"; }
+        function abrirLogros() { estaPausado = true; document.getElementById("btnBucleJuego").innerText = "▶ Reanudar"; cerrarModales(); renderizarLogros(); document.getElementById("modalLogros").style.visibility = "visible"; }
+        function abrirTienda() { estaPausado = true; document.getElementById("btnBucleJuego").innerText = "▶ Reanudar"; cerrarModales(); renderizarTienda(); document.getElementById("modalTienda").style.visibility = "visible"; }
+        function abrirRanking() { estaPausado = true; document.getElementById("btnBucleJuego").innerText = "▶ Reanudar"; cerrarModales(); renderizarRanking(); document.getElementById("modalRanking").style.visibility = "visible"; }
+        function abrirGuia() { estaPausado = true; document.getElementById("btnBucleJuego").innerText = "▶ Reanudar"; cerrarModales(); document.getElementById("modalGuia").style.visibility = "visible"; }
+
+        function cerrarModales() {
+            document.querySelectorAll('.modal').forEach(m => { if (m.id !== 'modalInicio') m.style.visibility = "hidden"; });
+        }
+
+        function renderizarPersonalizacion() {
+            let htmlCab = "";
+            CABEZAS_DEF.forEach(c => {
+                let activa = perfil.cabezaEquipada === c.id ? 'activa' : '';
+                htmlCab += `<button class="btn-opcion ${activa}" onclick="equiparCabeza('${c.id}')">${c.texto}</button>`;
+            });
+            document.getElementById("gridCabezas").innerHTML = htmlCab;
+
+            let htmlEf = "";
+            EFECTOS_DEF.forEach(e => {
+                let activa = perfil.efectoEquipado === e.id ? 'activa' : '';
+                htmlEf += `<button class="btn-opcion ${activa}" onclick="equiparEfecto('${e.id}')">${e.texto}</button>`;
+            });
+            document.getElementById("gridEfectos").innerHTML = htmlEf;
+
+            let htmlSkins = "";
+            for (let key in SKINS) {
+                let skin = SKINS[key];
+                let desbloqueada = perfil.nivel >= skin.nivelReq;
+                let equipada = perfil.skinEquipada === key;
+
+                htmlSkins += `<div class="item-skin">
+                    <div><strong>${skin.nombre}</strong><br><small>${desbloqueada ? 'Desbloqueado' : 'Req. Nivel ' + skin.nivelReq}</small></div>
+                    <button ${!desbloqueada ? 'disabled' : ''} onclick="equiparSkin('${key}')">${equipada ? 'Equipada' : 'Equipar'}</button>
+                </div>`;
+            }
+            document.getElementById("contenedorSkins").innerHTML = htmlSkins;
+        }
+
+        function equiparCabeza(id) { perfil.cabezaEquipada = id; guardarPerfil(); renderizarPersonalizacion(); }
+        function equiparEfecto(id) { perfil.efectoEquipado = id; guardarPerfil(); renderizarPersonalizacion(); }
+        function equiparSkin(key) { perfil.skinEquipada = key; guardarPerfil(); renderizarPersonalizacion(); }
+
+        function renderizarLogros() {
+            let html = "";
+            LOGROS_DEF.forEach(l => {
+                let obtenido = perfil.logrosObtenidos.includes(l.id);
+                html += `<div class="item-logro">
+                    <div><strong>${l.icono} ${l.nombre}</strong><br><small>${l.req}</small></div>
+                    <div style="font-size:1.1rem;">${obtenido ? '✅' : '🔒'}</div>
+                </div>`;
+            });
+            document.getElementById("contenedorLogros").innerHTML = html;
+        }
+
+        function renderizarTienda() {
+            let html = "";
+            TIPOS_POWERUP.forEach(p => {
+                html += `<div class="item-tienda">
+                    <div><strong>${p.texto}</strong><br><small>Precio: ${p.precio} 💰</small></div>
+                    <button onclick="comprarPoder('${p.id}', ${p.precio})">Comprar</button>
+                </div>`;
+            });
+            document.getElementById("contenedorTienda").innerHTML = html;
+        }
+
+        function comprarPoder(idPoder, precio) {
+            if (perfil.monedas >= precio) {
+                perfil.monedas -= precio;
+                activarPowerUp(idPoder);
+                guardarPerfil();
+                actualizarUIPerfil();
+                alert("🛒 ¡Compra realizada con éxito!");
+            } else {
+                alert("¡No tienes suficientes monedas!");
+            }
+        }
+
+        function renderizarRanking() {
+            let html = "";
+            let medallas = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+            let copia = [...rankingGlobal].sort((a, b) => b.puntos - a.puntos);
+            
+            copia.slice(0, 10).forEach((r, i) => {
+                let num = medallas[i] || `${i + 1}️⃣`;
+                let esYo = r.nombre === perfil.nombre ? ' (Tú)' : '';
+                html += `<tr><td>${num}</td><td>${r.nombre}${esYo}</td><td>${r.puntos}</td></tr>`;
+            });
+            document.getElementById("tablaRankingBody").innerHTML = html;
+        }
+
+        function actualizarUIPerfil() {
+            document.getElementById("nombreJugador").innerText = perfil.nombre;
+            let metaActual = REQUISITOS_NIVEL[perfil.nivel + 1] || "MÁX";
+            document.getElementById("nivelJugador").innerText = perfil.nivel >= 10 ? "10/10 (MÁX)" : `${perfil.nivel}/10 (${perfil.puntosAcumulados}/${metaActual} pts)`;
+            document.getElementById("monedasJugador").innerText = perfil.monedas;
+        }
+
+        function resetearPuntuacion() {
+            estaPausado = true;
+            let pass = prompt("🔑 Ingrese la contraseña para reiniciar:");
+            if (pass === CLAVE_ADMIN) {
+                if (confirm("⚠️ ¿Resetear todo tu progreso local?")) {
+                    perfil.nivel = 1; perfil.puntosAcumulados = 0; perfil.monedas = 0;
+                    perfil.skinEquipada = 'clasica'; perfil.cabezaEquipada = 'ninguna'; perfil.efectoEquipado = 'ninguno';
+                    perfil.logrosObtenidos = []; perfil.puestosSuperados = []; perfil.estats = { comidas: 0, velocidades: 0, venenosEsquivados: 0 };
+                    puntos = 0;
+                    rankingGlobal = RANKING_DEFECTO;
+                    localStorage.setItem("rankingGusano", JSON.stringify(rankingGlobal));
+                    guardarPerfil(); actualizarUIPerfil(); actualizarRecordUI(); finalizarJuego();
+                    alert("✅ Progreso reiniciado.");
+                }
+            } else if (pass !== null) { alert("❌ Contraseña incorrecta."); }
+        }
+
+        function guardarPerfil() { localStorage.setItem("perfilGusano", JSON.stringify(perfil)); }
+
+        function actualizarRanking(puntosLogrados) {
+            let jugadorExistente = rankingGlobal.find(j => j.nombre.toLowerCase() === perfil.nombre.toLowerCase());
+            if (jugadorExistente) {
+                if (puntosLogrados > jugadorExistente.puntos) jugadorExistente.puntos = puntosLogrados;
+            } else {
+                rankingGlobal.push({ nombre: perfil.nombre, puntos: puntosLogrados });
+            }
+            rankingGlobal.sort((a, b) => b.puntos - a.puntos);
+            localStorage.setItem("rankingGusano", JSON.stringify(rankingGlobal));
+            actualizarRecordUI();
+        }
+
+        function actualizarRecordUI() {
+            let miRegistro = rankingGlobal.find(j => j.nombre.toLowerCase() === perfil.nombre.toLowerCase());
+            document.getElementById("record").innerText = miRegistro ? miRegistro.puntos : 0;
+        }
+
+        function finalizarJuego() {
+            actualizarRanking(puntos);
+            alert(`¡Juego terminado ${perfil.nombre}!\nPuntuación obtenida: ${puntos}`);
+            
+            gusano = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
+            sigDx = 1; sigDy = 0; puntos = 0; combo = 1; puntosParaMoneda = 0;
+            efectosActivos = {};
+            cantidadEscudos = 0;
+            comidasEspeciales = [];
+            comidasVenenosas = [];
+            tiempoComidasEspeciales = 0;
+
+            document.getElementById("puntaje").innerText = 0;
+            document.getElementById("combo").innerText = 'x1';
+            actualizarUIEstadoPowerUp();
+            
+            juegoIniciado = false; estaPausado = true;
+            document.getElementById("btnBucleJuego").innerText = "▶ Iniciar";
+            document.getElementById("modalInicio").style.visibility = "visible";
+        }
+
+        requestAnimationFrame(buclePrincipal);
+    </script>
+</body>
+</html>
