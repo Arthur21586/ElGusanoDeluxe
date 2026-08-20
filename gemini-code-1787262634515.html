@@ -196,7 +196,9 @@
 
         const tamañoGrid = 18;
         const conteoGrid = canvas.width / tamañoGrid;
-        let VELOCIDAD_JUEGO = 140; 
+        
+        // Se aceleró la velocidad base del juego (de 140ms a 110ms) para giros más responsivos
+        let VELOCIDAD_JUEGO = 110; 
         const CLAVE_ADMIN = "1234";
 
         const REQUISITOS_NIVEL = {
@@ -273,7 +275,11 @@
         };
 
         let gusano = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
-        let dx = 1, dy = 0, sigDx = 1, sigDy = 0;
+        let dx = 1, dy = 0;
+        
+        // Cola de movimientos para giros ultra-rápidos e instantáneos
+        let colaMovimientos = [];
+
         let puntos = 0, combo = 1, tiempoUltimaComida = 0;
         let puntosParaMoneda = 0;
         let estaPausado = true; 
@@ -320,7 +326,7 @@
         actualizarRecordUI();
         document.addEventListener("keydown", manejarTeclado);
 
-        // --- SISTEMA DE GESTOS TÁCTILES GLOBAL (En toda la pantalla) ---
+        // --- SISTEMA DE GESTOS TÁCTILES GLOBAL ---
         let touchStartX = 0;
         let touchStartY = 0;
 
@@ -341,7 +347,7 @@
             let diffX = touchEndX - touchStartX;
             let diffY = touchEndY - touchStartY;
 
-            if (Math.abs(diffX) > 20 || Math.abs(diffY) > 20) {
+            if (Math.abs(diffX) > 15 || Math.abs(diffY) > 15) {
                 if (Math.abs(diffX) > Math.abs(diffY)) {
                     if (diffX > 0) cambiarDir('DER');
                     else cambiarDir('IZQ');
@@ -413,7 +419,14 @@
 
             if (tiempoActual - tiempoUltimoPaso >= velEfectiva) {
                 tiempoUltimoPaso = tiempoActual;
-                dx = sigDx; dy = sigDy;
+                
+                // Si hay movimientos guardados en la cola, tomar el siguiente
+                if (colaMovimientos.length > 0) {
+                    let sig = colaMovimientos.shift();
+                    dx = sig.dx;
+                    dy = sig.dy;
+                }
+
                 actualizarEstado();
             }
 
@@ -778,11 +791,21 @@
             }
         }
 
+        // Sistema mejorado con Cola de Comandos para giros instantáneos
         function cambiarDir(dir) {
-            if (dir === 'IZQ' && dx === 0) { sigDx = -1; sigDy = 0; }
-            if (dir === 'ARR' && dy === 0) { sigDx = 0; sigDy = -1; }
-            if (dir === 'DER' && dx === 0) { sigDx = 1; sigDy = 0; }
-            if (dir === 'ABA' && dy === 0) { sigDx = 0; sigDy = 1; }
+            // Permitir guardar máximo 2 giros rápidos por adelantado
+            if (colaMovimientos.length >= 2) return;
+
+            let ultimoMov = colaMovimientos.length > 0 ? colaMovimientos[colaMovimientos.length - 1] : { dx: dx, dy: dy };
+            let nuevoDx = 0, nuevoDy = 0;
+
+            if (dir === 'IZQ' && ultimoMov.dx === 0) { nuevoDx = -1; nuevoDy = 0; }
+            else if (dir === 'ARR' && ultimoMov.dy === 0) { nuevoDx = 0; nuevoDy = -1; }
+            else if (dir === 'DER' && ultimoMov.dx === 0) { nuevoDx = 1; nuevoDy = 0; }
+            else if (dir === 'ABA' && ultimoMov.dy === 0) { nuevoDx = 0; nuevoDy = 1; }
+            else return;
+
+            colaMovimientos.push({ dx: nuevoDx, dy: nuevoDy });
         }
 
         function manejarTeclado(e) {
@@ -941,7 +964,8 @@
             alert(`¡Juego terminado ${perfil.nombre}!\nPuntuación obtenida: ${puntos}`);
             
             gusano = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
-            sigDx = 1; sigDy = 0; puntos = 0; combo = 1; puntosParaMoneda = 0;
+            dx = 1; dy = 0; colaMovimientos = [];
+            puntos = 0; combo = 1; puntosParaMoneda = 0;
             efectosActivos = {};
             cantidadEscudos = 0;
             comidasEspeciales = [];
